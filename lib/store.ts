@@ -5,8 +5,8 @@
  *   - `data/**`  -> access: 'private'  (never publicly fetchable: holds password hashes)
  *   - `media/**` -> access: 'public'   (images + video served straight from the CDN)
  *
- * Local dev without a BLOB_READ_WRITE_TOKEN: falls back to `.data-dev/` on disk so
- * you can run `next dev` with zero setup.
+ * Local dev with no Blob credentials: falls back to `.data-dev/` on disk so you can
+ * run `next dev` with zero setup. Never on Vercel, where the filesystem is read-only.
  */
 import { put, del, list, get } from "@vercel/blob";
 import path from "node:path";
@@ -14,14 +14,78 @@ import fs from "node:fs/promises";
 
 const DEV_ROOT = path.join(process.cwd(), ".data-dev");
 
+/* -------------------------------------------------------------------------- */
+/* credentials                                                                */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Real Vercel Blob tokens are `vercel_blob_rw_<store>_<secret>`. We match on that
- * prefix rather than "is the variable set", so a leftover placeholder (or an empty
- * value from Vercel's UI) is treated as "no store" instead of failing every read
- * and write with "Access denied".
+ * Vercel hands a connected Blob store to the app in one of two shapes, and which
+ * one you get depends on how the store was connected:
+ *
+ *   - a read-write token, `vercel_blob_rw_<store>_<secret>`. Usually named
+ *     BLOB_READ_WRITE_TOKEN, but a store connected with an environment-variable
+ *     prefix gets that prefix instead (`blog_READ_WRITE_TOKEN`, ...).
+ *   - OIDC: `VERCEL_OIDC_TOKEN`, injected automatically, plus a store id
+ *     (`BLOB_STORE_ID`, or a prefixed `<prefix>_STORE_ID`) naming the store.
+ *
+ * Rather than hard-code one variable name and break when the store is reconnected
+ * differently, find the credentials by their *value*: a read-write token and a
+ * store id are both self-identifying. Every SDK call is then passed what we found,
+ * instead of relying on the SDK's own BLOB_READ_WRITE_TOKEN-only lookup.
+ */
+export type BlobCredentials = { token: string } | { storeId: string };
+
+const RW_TOKEN_PREFIX = "vercel_blob_rw_";
+const STORE_ID_PATTERN = /^store_[A-Za-z0-9]+$/;
+
+function envValue(name: string) {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+/** First environment value matching `test`, whatever the variable is called. */
+function findEnvValue(test: (value: string) => boolean) {
+  for (const raw of Object.values(process.env)) {
+    const value = raw?.trim();
+    if (value && test(value)) return value;
+  }
+  return undefined;
+}
+
+function resolveCredentials(): BlobCredentials | null {
+  const token = findEnvValue((v) => v.startsWith(RW_TOKEN_PREFIX));
+  if (token) return { token };
+
+  if (envValue("VERCEL_OIDC_TOKEN")) {
+    const storeId =
+      envValue("BLOB_STORE_ID") ?? findEnvValue((v) => STORE_ID_PATTERN.test(v));
+    if (storeId) return { storeId };
+  }
+
+  return null;
+}
+
+// Environment variables do not change while the process lives, so resolve once.
+let cachedCredentials: BlobCredentials | null | undefined;
+
+export function blobCredentials(): BlobCredentials | null {
+  if (cachedCredentials === undefined) cachedCredentials = resolveCredentials();
+  return cachedCredentials;
+}
+
+/** True when the app can read and write a Blob store. */
+export function storageConfigured() {
+  return blobCredentials() !== null;
+}
+
+/**
+ * Whether the browser can upload straight to Blob. That needs a read-write token
+ * to mint a short-lived client token from; OIDC credentials cannot, so those
+ * uploads go through the server instead (see app/api/media/route.ts).
  */
 export function hasBlobStore() {
-  return (process.env.BLOB_READ_WRITE_TOKEN ?? "").trim().startsWith("vercel_blob_rw_");
+  const credentials = blobCredentials();
+  return credentials !== null && "token" in credentials;
 }
 
 /**
@@ -36,11 +100,18 @@ function canUseDevFallback() {
 
 export const NO_BLOB_STORE_MESSAGE =
   "No Blob store is connected to this deployment. In Vercel open Storage -> Create Database -> Blob, " +
-  "connect it to this project, then redeploy. BLOB_READ_WRITE_TOKEN is injected automatically.";
+  "connect it to this project, then redeploy so the store's environment variables are picked up.";
 
 /** True when the app has nowhere to persist data: deployed, with no Blob store. */
 export function storageUnavailable() {
-  return !hasBlobStore() && !canUseDevFallback();
+  return !storageConfigured() && !canUseDevFallback();
+}
+
+/** Spread into every SDK call so it uses the credentials we actually found. */
+function auth() {
+  const credentials = blobCredentials();
+  if (!credentials) throw new Error(NO_BLOB_STORE_MESSAGE);
+  return credentials;
 }
 
 /** JSON data blobs are cached briefly at the edge; reads always bypass that cache. */
@@ -98,10 +169,10 @@ async function devList(prefix: string): Promise<string[]> {
 
 async function readRecord<T>(key: string): Promise<Record_<T> | null> {
   // Deployed with no store: there is nothing to read, so render empty rather than 500.
-  if (!hasBlobStore()) return canUseDevFallback() ? devRead<T>(key) : null;
+  if (!storageConfigured()) return canUseDevFallback() ? devRead<T>(key) : null;
 
   // useCache:false -> read from origin so a just-published post is never stale.
-  const res = await get(key, { access: "private", useCache: false });
+  const res = await get(key, { access: "private", useCache: false, ...auth() });
   if (!res || res.statusCode !== 200) return null;
   const text = await new Response(res.stream).text();
   try {
@@ -117,7 +188,7 @@ export async function readJSON<T>(key: string): Promise<T | null> {
 }
 
 export async function writeJSON(key: string, value: unknown): Promise<void> {
-  if (!hasBlobStore()) {
+  if (!storageConfigured()) {
     if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
     return devWrite(key, value);
   }
@@ -127,25 +198,26 @@ export async function writeJSON(key: string, value: unknown): Promise<void> {
     allowOverwrite: true,
     contentType: "application/json",
     cacheControlMaxAge: DATA_CACHE_SECONDS,
+    ...auth(),
   });
 }
 
 export async function removeKey(key: string): Promise<void> {
-  if (!hasBlobStore()) {
+  if (!storageConfigured()) {
     if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
     await fs.rm(devPath(key), { force: true });
     return;
   }
-  await del(key);
+  await del(key, auth());
 }
 
 export async function listKeys(prefix: string): Promise<string[]> {
-  if (!hasBlobStore()) return canUseDevFallback() ? devList(prefix) : [];
+  if (!storageConfigured()) return canUseDevFallback() ? devList(prefix) : [];
 
   const keys: string[] = [];
   let cursor: string | undefined;
   do {
-    const res = await list({ prefix, cursor, limit: 1000 });
+    const res = await list({ prefix, cursor, limit: 1000, ...auth() });
     for (const b of res.blobs) keys.push(b.pathname);
     cursor = res.hasMore ? res.cursor : undefined;
   } while (cursor);
@@ -189,7 +261,7 @@ export async function updateJSON<T>(
     const current = await readRecord<T>(key);
     const next = mutate(current ? current.value : null);
 
-    if (!hasBlobStore()) {
+    if (!storageConfigured()) {
       if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
       await devWrite(key, next);
       return next;
@@ -198,6 +270,7 @@ export async function updateJSON<T>(
     try {
       await put(key, JSON.stringify(next), {
         access: "private",
+        ...auth(),
         addRandomSuffix: false,
         contentType: "application/json",
         cacheControlMaxAge: DATA_CACHE_SECONDS,
