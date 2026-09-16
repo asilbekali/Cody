@@ -1,26 +1,784 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Design tokens — iOS system palette, type ramp and motion curves.
+   ========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --label: #000000;
+  --label-secondary: rgba(60, 60, 67, 0.6);
+  --label-tertiary: rgba(60, 60, 67, 0.3);
+  --separator: rgba(60, 60, 67, 0.2);
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill-strong: rgba(120, 120, 128, 0.2);
+
+  --accent: #007aff;
+  --accent-soft: rgba(0, 122, 255, 0.1);
+  --danger: #ff3b30;
+  --success: #34c759;
+
+  --nav-blur: saturate(180%) blur(20px);
+  --nav-bg: rgba(249, 249, 249, 0.8);
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.08), 0 16px 48px rgba(0, 0, 0, 0.12);
+
+  /* iOS motion: decisive out, gentle settle. */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --shell: 44rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* Dark palette lives in one place, applied through three selectors:
+   1. system preference, unless the reader explicitly chose light
+   2. explicit dark choice
+   The light palette above is the single source of truth for every token name. */
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-elevated: #2c2c2e;
+    --label: #ffffff;
+    --label-secondary: rgba(235, 235, 245, 0.6);
+    --label-tertiary: rgba(235, 235, 245, 0.3);
+    --separator: rgba(84, 84, 88, 0.6);
+    --fill: rgba(120, 120, 128, 0.24);
+    --fill-strong: rgba(120, 120, 128, 0.36);
+
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.18);
+    --danger: #ff453a;
+    --success: #30d158;
+
+    --nav-bg: rgba(20, 20, 22, 0.72);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.6);
   }
 }
 
+:root[data-theme="dark"] {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-elevated: #2c2c2e;
+    --label: #ffffff;
+    --label-secondary: rgba(235, 235, 245, 0.6);
+    --label-tertiary: rgba(235, 235, 245, 0.3);
+    --separator: rgba(84, 84, 88, 0.6);
+    --fill: rgba(120, 120, 128, 0.24);
+    --fill-strong: rgba(120, 120, 128, 0.36);
+
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.18);
+    --danger: #ff453a;
+    --success: #30d158;
+
+    --nav-bg: rgba(20, 20, 22, 0.72);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Theme changes fade rather than snap. Suppressed while the toggle is animating
+   on first paint so there is no flash of the wrong palette. */
+:root[data-theme] body,
+:root[data-theme] .card,
+:root[data-theme] .group,
+:root[data-theme] .input,
+:root[data-theme] .navbar {
+  transition: background-color 0.35s var(--ease-ios), color 0.35s var(--ease-ios),
+    border-color 0.35s var(--ease-ios);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-label: var(--label);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-ios);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  /* iOS uses SF Pro; fall back gracefully everywhere else. */
+  --font-ios: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-ios);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--label);
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ==========================================================================
+   Layout shell
+   ========================================================================== */
+
+.shell {
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+.shell-wide {
+  max-width: 62rem;
+}
+
+/* Large iOS title that shrinks into the nav bar as you scroll. */
+.large-title {
+  font-size: clamp(2rem, 7vw, 2.55rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+.title-2 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+}
+
+.footnote {
+  font-size: 0.8125rem;
+  color: var(--label-secondary);
+  letter-spacing: -0.005em;
+}
+
+.secondary {
+  color: var(--label-secondary);
+}
+
+/* ==========================================================================
+   Navigation bar — translucent, blurred, hairline separator
+   ========================================================================== */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--nav-bg);
+  backdrop-filter: var(--nav-blur);
+  -webkit-backdrop-filter: var(--nav-blur);
+  border-bottom: 0.5px solid transparent;
+  transition: border-color 0.3s var(--ease-ios);
+}
+
+.navbar[data-scrolled="true"] {
+  border-bottom-color: var(--separator);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+}
+
+.nav-link {
+  color: var(--accent);
+  font-size: 1.0625rem;
+  padding: 6px 2px;
+  transition: opacity 0.2s var(--ease-ios);
+}
+
+.nav-link:active {
+  opacity: 0.4;
+}
+
+/* ==========================================================================
+   Cards + grouped lists
+   ========================================================================== */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.group {
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Inset hairline between rows, iOS-style (starts after the row's leading padding). */
+.group > * + * {
+  border-top: 0.5px solid var(--separator);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  min-height: 44px; /* Apple's minimum touch target */
+  width: 100%;
+  text-align: left;
+  transition: background-color 0.15s var(--ease-ios);
+}
+
+.row-tappable:active {
+  background: var(--fill);
+}
+
+/* ==========================================================================
+   Controls
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  font-size: 1.0625rem;
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.22s var(--ease-spring), background-color 0.2s var(--ease-ios),
+    opacity 0.2s var(--ease-ios);
+}
+
+/* The press-down is what makes a button feel native rather than web. */
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--fill);
+  color: var(--label);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  padding-inline: 8px;
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.btn-pill {
+  border-radius: 999px;
+}
+
+.input {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 16px;
+  background: var(--surface);
+  color: var(--label);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius);
+  font-size: 1.0625rem;
+  font-family: inherit;
+  transition: border-color 0.2s var(--ease-ios), box-shadow 0.2s var(--ease-ios);
+}
+
+.input::placeholder {
+  color: var(--label-tertiary);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3.5px var(--accent-soft);
+}
+
+textarea.input {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--label-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background-color 0.2s var(--ease-ios), transform 0.22s var(--ease-spring);
+}
+
+.chip-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.chip:active {
+  transform: scale(0.94);
+}
+
+/* Segmented control — the iOS tab switcher */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--fill);
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.segmented button {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--label-secondary);
+  transition: all 0.25s var(--ease-ios);
+}
+
+.segmented button[data-active="true"] {
+  background: var(--surface-elevated);
+  color: var(--label);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ==========================================================================
+   Prose — rendered post bodies
+   ========================================================================== */
+
+.prose {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  letter-spacing: -0.011em;
+}
+
+.prose > * + * {
+  margin-top: 1.1em;
+}
+
+.prose h2 {
+  font-size: 1.5rem;
+  font-weight: 680;
+  letter-spacing: -0.022em;
+  margin-top: 1.9em;
+  line-height: 1.25;
+}
+
+.prose h3 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-top: 1.7em;
+}
+
+.prose h4 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  margin-top: 1.5em;
+}
+
+.prose a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--accent-soft);
+  transition: border-color 0.2s var(--ease-ios);
+}
+
+.prose a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.prose strong {
+  font-weight: 650;
+}
+
+.prose code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.875em;
+  background: var(--fill);
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+}
+
+.prose pre {
+  background: var(--surface);
+  border: 0.5px solid var(--separator);
+  border-radius: var(--radius);
+  padding: 16px;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.prose blockquote {
+  padding-left: 18px;
+  border-left: 3px solid var(--accent);
+  color: var(--label-secondary);
+  font-style: italic;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+}
+
+.prose ul {
+  list-style: disc;
+}
+
+.prose ol {
+  list-style: decimal;
+}
+
+.prose li + li {
+  margin-top: 0.4em;
+}
+
+.prose li::marker {
+  color: var(--label-tertiary);
+}
+
+.prose hr {
+  border: none;
+  height: 0.5px;
+  background: var(--separator);
+  margin-block: 2.2em;
+}
+
+.prose .media {
+  margin-block: 1.8em;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--fill);
+}
+
+.prose .media img,
+.prose .media video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.prose .media figcaption {
+  padding: 10px 14px;
+  font-size: 0.8125rem;
+  color: var(--label-secondary);
+  text-align: center;
+}
+
+/* ==========================================================================
+   Motion
+   ========================================================================== */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -200%;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Staggered entrance: children animate in sequence via --i. */
+.rise {
+  animation: rise 0.55s var(--ease-ios) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.fade-in {
+  animation: fade 0.4s var(--ease-ios) both;
+}
+
+.sheet-in {
+  animation: sheet-up 0.45s var(--ease-ios) both;
+}
+
+.pop {
+  animation: pop 0.4s var(--ease-spring);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--fill) 25%,
+    var(--fill-strong) 37%,
+    var(--fill) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Anything with a springy press response. */
+.pressable {
+  transition: transform 0.22s var(--ease-spring), opacity 0.2s var(--ease-ios);
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Toast
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-float);
+  border: 0.5px solid var(--separator);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  max-width: calc(100vw - 40px);
+}
+
+.hairline-top {
+  border-top: 0.5px solid var(--separator);
+}
+
+/* ==========================================================================
+   Theme toggle — a two-stop iOS segmented switch
+   ========================================================================== */
+
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  padding: 2px;
+  background: var(--fill);
+  border-radius: 999px;
+}
+
+.theme-toggle button {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 999px;
+  color: var(--label-tertiary);
+  transition: color 0.3s var(--ease-ios);
+}
+
+.theme-toggle button[data-active="true"] {
+  color: var(--label);
+}
+
+/* The sliding pill that follows the active choice. */
+.theme-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 30px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  transform: translateX(calc(var(--theme-index, 0) * 30px));
+  transition: transform 0.38s var(--ease-spring);
+}
+
+/* ==========================================================================
+   Share sheet — slides up from the bottom like a native action sheet
+   ========================================================================== */
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheet-rise {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  animation: scrim-in 0.3s var(--ease-ios) both;
+}
+
+.action-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 91;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  animation: sheet-rise 0.42s var(--ease-ios) both;
+}
+
+.action-sheet-inner {
+  max-width: 30rem;
+  margin-inline: auto;
+}
+
+.action-sheet .group {
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+}
+
+.action-sheet .row {
+  justify-content: center;
+  font-size: 1.0625rem;
+  color: var(--accent);
+  padding-block: 15px;
+}
+
+.grabber {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--label-tertiary);
+  margin: 6px auto 12px;
+}
+
+/* ==========================================================================
+   Avatar
+   ========================================================================== */
+
+.avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent), #5e5ce6);
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
