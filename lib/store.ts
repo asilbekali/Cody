@@ -14,8 +14,14 @@ import fs from "node:fs/promises";
 
 const DEV_ROOT = path.join(process.cwd(), ".data-dev");
 
+/**
+ * Real Vercel Blob tokens are `vercel_blob_rw_<store>_<secret>`. We match on that
+ * prefix rather than "is the variable set", so a leftover placeholder (or an empty
+ * value from Vercel's UI) falls back to `.data-dev/` instead of failing every read
+ * and write with "Access denied".
+ */
 export function hasBlobStore() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return (process.env.BLOB_READ_WRITE_TOKEN ?? "").trim().startsWith("vercel_blob_rw_");
 }
 
 /** JSON data blobs are cached briefly at the edge; reads always bypass that cache. */

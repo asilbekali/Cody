@@ -35,7 +35,7 @@ export async function ownerLoginAction(
   if (!ownerCredentialsConfigured()) {
     return {
       error:
-        "OWNER_USERNAME and OWNER_PASSWORD are not set. Add them in your Vercel project settings (or .env.local) and reload.",
+        "OWNER_USERNAME and OWNER_PASSWORD are not set. Add them to .env.local and restart the dev server (or set them in your Vercel project settings and redeploy).",
     };
   }
 
