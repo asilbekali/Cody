@@ -67,6 +67,8 @@ export default async function HomePage() {
           </div>
         )}
 
+
+
         {!member && posts.length ? (
           <section className="card rise mt-10 p-7 text-center">
             <h2 className="title-2">Join {siteConfig.name}</h2>
