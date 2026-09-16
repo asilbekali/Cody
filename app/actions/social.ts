@@ -12,21 +12,39 @@ import { getPost } from "@/lib/posts";
 
 export type SocialResult = { ok: boolean; error?: string };
 
+/** Same reasoning as the studio actions: a failed write is a message, not a 500. */
+function storageError(error: unknown) {
+  console.error("[social] storage write failed", error);
+  return {
+    ok: false as const,
+    error:
+      error instanceof Error ? error.message : "Something went wrong. Please try again.",
+  };
+}
+
 export async function toggleLikeAction(postId: string) {
   const member = await getMemberSession();
   if (!member) return { ok: false as const, error: "Sign in to like posts." };
 
-  const result = await toggleLike(postId, member.sub);
-  return { ok: true as const, ...result };
+  try {
+    const result = await toggleLike(postId, member.sub);
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return storageError(error);
+  }
 }
 
 export async function toggleBookmarkAction(postId: string) {
   const member = await getMemberSession();
   if (!member) return { ok: false as const, error: "Sign in to save posts." };
 
-  const result = await toggleBookmark(postId, member.sub);
-  revalidatePath("/me");
-  return { ok: true as const, ...result };
+  try {
+    const result = await toggleBookmark(postId, member.sub);
+    revalidatePath("/me");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return storageError(error);
+  }
 }
 
 export async function addCommentAction(postId: string, body: string) {
@@ -41,9 +59,13 @@ export async function addCommentAction(postId: string, body: string) {
   const post = await getPost(postId);
   if (!post) return { ok: false as const, error: "That post no longer exists." };
 
-  const comment = await addComment(postId, member.sub, member.name ?? "Member", text);
-  revalidatePath(`/p/${post.slug}`);
-  return { ok: true as const, comment };
+  try {
+    const comment = await addComment(postId, member.sub, member.name ?? "Member", text);
+    revalidatePath(`/p/${post.slug}`);
+    return { ok: true as const, comment };
+  } catch (error) {
+    return storageError(error);
+  }
 }
 
 /**
@@ -56,7 +78,11 @@ export async function deleteCommentAction(postId: string, commentId: string) {
 
   if (!owner && !member) return { ok: false as const, error: "Not allowed." };
 
-  await deleteComment(postId, commentId, owner ? null : member!.sub);
+  try {
+    await deleteComment(postId, commentId, owner ? null : member!.sub);
+  } catch (error) {
+    return storageError(error);
+  }
 
   const post = await getPost(postId);
   if (post) revalidatePath(`/p/${post.slug}`);

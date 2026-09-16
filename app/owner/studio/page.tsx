@@ -2,7 +2,7 @@ import Link from "next/link";
 import { listPosts } from "@/lib/posts";
 import { countMembers } from "@/lib/members";
 import { listAllComments, getLikeSummary } from "@/lib/social";
-import { hasBlobStore } from "@/lib/store";
+import { hasBlobStore, storageUnavailable } from "@/lib/store";
 import { formatDate } from "@/lib/format";
 
 export default async function StudioPage() {
@@ -25,7 +25,16 @@ export default async function StudioPage() {
         </Link>
       </div>
 
-      {!hasBlobStore() ? (
+      {storageUnavailable() ? (
+        <div
+          className="rise mb-6 rounded-[var(--radius)] px-4 py-3 text-[14px]"
+          style={{ background: "rgba(255,59,48,0.12)", color: "var(--label)" }}
+        >
+          <strong>Nothing can be saved.</strong> This deployment has no Blob store, and
+          its filesystem is read-only. In Vercel open <strong>Storage → Create Database
+          → Blob</strong>, connect it to this project, then redeploy.
+        </div>
+      ) : !hasBlobStore() ? (
         <div
           className="rise mb-6 rounded-[var(--radius)] px-4 py-3 text-[14px]"
           style={{ background: "rgba(255,149,0,0.12)", color: "var(--label)" }}

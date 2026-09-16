@@ -66,7 +66,17 @@ export async function registerAction(
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
-  const result = await registerMember(name, email, password);
+  let result;
+  try {
+    result = await registerMember(name, email, password);
+  } catch (error) {
+    // Outside the try: redirect() below signals by throwing, and must not be caught.
+    console.error("[auth] could not create account", error);
+    return {
+      error:
+        error instanceof Error ? error.message : "Could not create your account.",
+    };
+  }
   if (!result.ok) return { error: result.error };
 
   await signInMember(result.member.id, result.member.name);

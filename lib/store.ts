@@ -17,11 +17,30 @@ const DEV_ROOT = path.join(process.cwd(), ".data-dev");
 /**
  * Real Vercel Blob tokens are `vercel_blob_rw_<store>_<secret>`. We match on that
  * prefix rather than "is the variable set", so a leftover placeholder (or an empty
- * value from Vercel's UI) falls back to `.data-dev/` instead of failing every read
+ * value from Vercel's UI) is treated as "no store" instead of failing every read
  * and write with "Access denied".
  */
 export function hasBlobStore() {
   return (process.env.BLOB_READ_WRITE_TOKEN ?? "").trim().startsWith("vercel_blob_rw_");
+}
+
+/**
+ * The `.data-dev/` fallback only works where the filesystem is writable. On Vercel
+ * the bundle lives in a read-only `/var/task`, so writing there fails with a bare
+ * ENOENT that says nothing about the real problem. Detect that case explicitly and
+ * report the actual cause instead.
+ */
+function canUseDevFallback() {
+  return !process.env.VERCEL;
+}
+
+export const NO_BLOB_STORE_MESSAGE =
+  "No Blob store is connected to this deployment. In Vercel open Storage -> Create Database -> Blob, " +
+  "connect it to this project, then redeploy. BLOB_READ_WRITE_TOKEN is injected automatically.";
+
+/** True when the app has nowhere to persist data: deployed, with no Blob store. */
+export function storageUnavailable() {
+  return !hasBlobStore() && !canUseDevFallback();
 }
 
 /** JSON data blobs are cached briefly at the edge; reads always bypass that cache. */
@@ -78,7 +97,8 @@ async function devList(prefix: string): Promise<string[]> {
 /* -------------------------------------------------------------------------- */
 
 async function readRecord<T>(key: string): Promise<Record_<T> | null> {
-  if (!hasBlobStore()) return devRead<T>(key);
+  // Deployed with no store: there is nothing to read, so render empty rather than 500.
+  if (!hasBlobStore()) return canUseDevFallback() ? devRead<T>(key) : null;
 
   // useCache:false -> read from origin so a just-published post is never stale.
   const res = await get(key, { access: "private", useCache: false });
@@ -97,7 +117,10 @@ export async function readJSON<T>(key: string): Promise<T | null> {
 }
 
 export async function writeJSON(key: string, value: unknown): Promise<void> {
-  if (!hasBlobStore()) return devWrite(key, value);
+  if (!hasBlobStore()) {
+    if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
+    return devWrite(key, value);
+  }
   await put(key, JSON.stringify(value), {
     access: "private",
     addRandomSuffix: false,
@@ -109,6 +132,7 @@ export async function writeJSON(key: string, value: unknown): Promise<void> {
 
 export async function removeKey(key: string): Promise<void> {
   if (!hasBlobStore()) {
+    if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
     await fs.rm(devPath(key), { force: true });
     return;
   }
@@ -116,7 +140,7 @@ export async function removeKey(key: string): Promise<void> {
 }
 
 export async function listKeys(prefix: string): Promise<string[]> {
-  if (!hasBlobStore()) return devList(prefix);
+  if (!hasBlobStore()) return canUseDevFallback() ? devList(prefix) : [];
 
   const keys: string[] = [];
   let cursor: string | undefined;
@@ -166,6 +190,7 @@ export async function updateJSON<T>(
     const next = mutate(current ? current.value : null);
 
     if (!hasBlobStore()) {
+      if (!canUseDevFallback()) throw new Error(NO_BLOB_STORE_MESSAGE);
       await devWrite(key, next);
       return next;
     }

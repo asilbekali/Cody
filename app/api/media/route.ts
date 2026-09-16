@@ -3,7 +3,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { getOwner } from "@/lib/session";
-import { hasBlobStore } from "@/lib/store";
+import { hasBlobStore, storageUnavailable, NO_BLOB_STORE_MESSAGE } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -42,6 +42,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Deployed with no Blob store: public/uploads is not writable, so say why.
+  if (storageUnavailable()) {
+    return NextResponse.json({ error: NO_BLOB_STORE_MESSAGE }, { status: 503 });
+  }
   if (!hasBlobStore()) return devUpload(request);
 
   try {
